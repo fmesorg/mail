@@ -79,39 +79,39 @@ class SMTPMailer {
 
 			$password = $this->getPasswordForCurrentUser($currentUserEmail);
 			if(!$password){
-				$this->setDefaultUsernamePassword();
-			}
+				error_log("Email Can not be sent for User: ".$currentUserName, 0);
+				echo "Email can not be sent";
+			}else{
+				$from_email = $this->username;
+				$from_name = $currentUserName;
 
-				error_log("this->password".$this->password.", this->username".$this->username,0);
+				//-------------------------------
+				$email->Username = $this->username;                 // SMTP username
+				$email->Password = $this->password;                           // SMTP password
+				$email->SMTPSecure = 'ssl';
+				$email->Port = 465;                                    // TCP port to connect to
 
-			$from_email = $this->username;
-			$from_name = $currentUserName;
+				$to_email = $mail->getData('recipients')[0]['email'];
+				$to_name = $mail->getData('recipients')[0]['name'];
 
-			//-------------------------------
-            $email->Username = $this->username;                 // SMTP username
-            $email->Password = $this->password;                           // SMTP password
-            $email->SMTPSecure = 'ssl';
-            $email->Port = 465;                                    // TCP port to connect to
-
-            $to_email = $mail->getData('recipients')[0]['email'];
-            $to_name = $mail->getData('recipients')[0]['name'];
-
-            //Recipients
-			$email->setFrom($from_email, $from_name);
-            $email->addAddress($to_email, $to_name);     // Add a recipient   // Name is optional //$to
+				//Recipients
+				$email->setFrom($from_email, $from_name);
+				$email->addAddress($to_email, $to_name);     // Add a recipient   // Name is optional //$to
 
 
-            if(!empty($mail->getData('ccs')[0]['email']))
-            {
-                $email->AddCC($mail->getData('ccs')[0]['email'],$mail->getData('ccs')[0]['name']);
-            }
+				if(!empty($mail->getData('ccs')[0]['email']))
+				{
+					$email->AddCC($mail->getData('ccs')[0]['email'],$mail->getData('ccs')[0]['name']);
+				}
 
-            $email->isHTML(true);
-            $email->Subject = $subject;
-            $email->Body = $body;
+				$email->isHTML(true);
+				$email->Subject = $subject;
+				$email->Body = $body;
 
-           $email->send();
-        } catch (Exception $e) {
+				$email->send();
+
+				}
+	        } catch (Exception $e) {
             echo 'Message could not be sent. Mailer Error: ', $email->ErrorInfo;
         }
 		return 1;
@@ -135,8 +135,6 @@ class SMTPMailer {
         	$Password = "";
 		}
 
-        error_log("PAssword: ".$Password,0);
-
         if(empty($Password)){
             return 0;
         }else{
@@ -144,12 +142,6 @@ class SMTPMailer {
         	$this->username = $currentUserEmailID;
             return 1;
         }
-    }
-
-    function setDefaultUsernamePassword(){
-        $this->username = Config::getVar('email', 'smtp_default_email');
-        $this->password = Config::getVar('email', 'smtp_default_email_password');
-        return 1;
     }
 
 	/**
