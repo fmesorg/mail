@@ -73,37 +73,19 @@ class SMTPMailer {
             $email->Host = 'smtp.zoho.com';  // Specify main and backup SMTP servers
             $email->SMTPAuth = true;                               // Enable SMTP authentication
 
-//            $this->username = Config::getVar('email', 'smtp_username_php_mailer');
-//            $this->password = Config::getVar('email', 'smtp_password_php_mailer');
+			$from = $mail->getFrom();
+			$currentUserEmail = $from['email'];
+            $currentUserName = $from['name'];
 
-			$currentUserEmail = 'xyz@ijme.in';
-            $currentUserName = 'Editor';
+			$password = $this->getPasswordForCurrentUser($currentUserEmail);
+			if(!$password){
+				$this->setDefaultUsernamePassword();
+			}
 
+				error_log("this->password".$this->password.", this->username".$this->username,0);
 
-            //-------------------------------
-				$this->username = Config::getVar('email', 'smtp_username_php_mailer');
-				$emailMap = $this->username;
-
-				$emailArray = explode(",",$emailMap);
-				$SendEmail = array();
-
-				foreach ($emailArray as $EmailSet){
-					$tempEmail = explode("=>",$EmailSet);
-					$SendEmail[$tempEmail[0]] = $tempEmail[1];
-				}
-
-				$Password = $SendEmail[$currentUserEmail];
-				if(empty($Password)){
-                    $this->username = Config::getVar('email', 'smtp_default_email');
-				    $this->password = Config::getVar('email', 'smtp_default_email_password');
-                    $from_email 	= Config::getVar('email', 'smtp_default_email');
-                    $from_name 		= Config::getVar('email', 'smtp_default_from_name');
-				}else{
-					$this->username = $currentUserEmail;
-					$this->password = $Password;
-                    $from_email = $currentUserEmail;
-                    $from_name = $currentUserName;
-				}
+			$from_email = $this->username;
+			$from_name = $currentUserName;
 
 			//-------------------------------
             $email->Username = $this->username;                 // SMTP username
@@ -136,31 +118,39 @@ class SMTPMailer {
 	}
 
 
-//   function getPasswordForCurrentUser($currentUserEmailID){
-//        $this->username = Config::getVar('email', 'smtp_username_php_mailer');
-//        $emailMap = $this->username;
-//
-//        $emailArray = explode(",",$emailMap);
-//        $SendEmail = array();
-//
-//        foreach ($emailArray as $EmailSet){
-//            $tempEmail = explode("=>",$EmailSet);
-//            $SendEmail[$tempEmail[0]] = $tempEmail[1];
-//        }
-//
-//        $Password = $SendEmail[$currentUserEmailID];
-//        if(empty($Password)){
-//            return false;
-//        }else{
-//            return $Password;
-//        }
-//    }
-//
-//    function setDefaultUsernamePassword(){
-//        $this->username = Config::getVar('email', 'smtp_default_email');
-//        $this->password = Config::getVar('email', 'smtp_default_email_password');
-//        return 1;
-//    }
+   function getPasswordForCurrentUser($currentUserEmailID){
+	   $emailMap = Config::getVar('email', 'smtp_username_php_mailer');
+
+        $emailArray = explode(",",$emailMap);
+        $SendEmail = array();
+
+        foreach ($emailArray as $EmailSet){
+            $tempEmail = explode("=>",$EmailSet);
+            $SendEmail[$tempEmail[0]] = $tempEmail[1];
+        }
+
+        if(array_key_exists($currentUserEmailID,$SendEmail)){
+			$Password = $SendEmail[$currentUserEmailID];
+		}else{
+        	$Password = "";
+		}
+
+        error_log("PAssword: ".$Password,0);
+
+        if(empty($Password)){
+            return 0;
+        }else{
+        	$this->password = $Password;
+        	$this->username = $currentUserEmailID;
+            return 1;
+        }
+    }
+
+    function setDefaultUsernamePassword(){
+        $this->username = Config::getVar('email', 'smtp_default_email');
+        $this->password = Config::getVar('email', 'smtp_default_email_password');
+        return 1;
+    }
 
 	/**
 	 * Connect to the SMTP server.
