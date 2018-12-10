@@ -94,9 +94,25 @@ class SMTPMailer {
 				$to_email = $mail->getData('recipients')[0]['email'];
 				$to_name = $mail->getData('recipients')[0]['name'];
 
+				import('classes.file.TemporaryFileManager');
+				$temporaryFileManager = new TemporaryFileManager();
+
+				$path = $temporaryFileManager->getBasePath();
+
+				//Attachment
+				if(!empty($mail->persistAttachments[0])){
+					$attachment = $mail->persistAttachments[0];
+					$filnam = $attachment->getData('fileName');
+					$orignalFileName = $attachment->getData('originalFileName');
+					$fileType = $attachment->getData('filetype');
+					$email->addAttachment($path.$filnam,$orignalFileName,'base64',$fileType);
+				}
+
+
 				//Recipients
 				$email->setFrom($from_email, $from_name);
 				$email->addAddress($to_email, $to_name);     // Add a recipient   // Name is optional //$to
+
 
 
 				if(!empty($mail->getData('ccs')[0]['email']))
@@ -104,15 +120,19 @@ class SMTPMailer {
 					$email->AddCC($mail->getData('ccs')[0]['email'],$mail->getData('ccs')[0]['name']);
 				}
 
+				if(!empty($mail->getData('body'))){
+
+					$email_body = $mail->getData('body');
+				}
+
 				$email->isHTML(true);
 				$email->Subject = $subject;
-				$email->Body = $body;
-
+				$email->Body = $email_body;
 				$email->send();
 
 				}
 	        } catch (Exception $e) {
-            echo 'Message could not be sent. Mailer Error: ', $email->ErrorInfo;
+            error_log("Message could not be sent. Mailer Error:".$email->ErrorInfo,0);
         }
 		return 1;
 	}

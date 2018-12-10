@@ -304,6 +304,7 @@ class PKPMailTemplate extends Mail {
 
 		if (Request::getUserVar('persistAttachments') != null) foreach (Request::getUserVar('persistAttachments') as $fileId) {
 			$temporaryFile = $temporaryFileManager->getFile($fileId, $userId);
+
 			if (!empty($temporaryFile)) {
 				if ($deleteAttachment != $temporaryFile->getId()) {
 					$this->persistAttachments[] = $temporaryFile;
