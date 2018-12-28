@@ -170,7 +170,11 @@ class PKPMailTemplate extends Mail {
 		$form = new Form($alternateTemplate!=null?$alternateTemplate:'email/email.tpl');
 
 		$form->setData('formActionUrl', $formActionUrl);
-		$form->setData('subject', $this->getSubject());
+		if(isset($_GET["articleId"])){
+			$form->setData('subject', "[SUBMISSION: ".$_GET["articleId"]."] ".$this->getSubject());
+		}else{
+			$form->setData('subject', $this->getSubject());
+		}
 		$form->setData('body', $this->getBody());
 
 		$form->setData('to', $this->getRecipients());
