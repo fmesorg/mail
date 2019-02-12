@@ -3,7 +3,8 @@
 /**
  * @file classes/mail/SMTPMailer.inc.php
  *
- * Copyright (c) 2000-2013 John Willinsky
+ * Copyright (c) 2013-2014 Simon Fraser University Library
+ * Copyright (c) 2000-2014 John Willinsky
  * Distributed under the GNU GPL v2. For full terms see the file docs/COPYING.
  *
  * @class SMTPMailer
@@ -19,7 +20,6 @@ import('lib.pkp.classes.mail.Mail');
 
 require 'PHPMailer/class.phpmailer.php';
 require 'PHPMailer/class.smtp.php';
-
 
 class SMTPMailer {
 
@@ -56,26 +56,152 @@ class SMTPMailer {
 			$this->port = 25;
 	}
 
-    /**
-     * @param $mail
-     * @param $recipients
-     * @param $subject
-     * @param $body
-     * @param string $headers
-     */
-    function mail(&$mail, $recipients, $subject, $body, $headers = '') {
+	function isCurrentUserInList($current_user_email){
+		$emailMap = Config::getVar('email', 'smtp_username_php_mailer');
 
+		$emailArray = explode(",",$emailMap);
+		$SendEmail = array();
+
+		foreach ($emailArray as $EmailSet){
+			$tempEmail = explode("=>",$EmailSet);
+			$SendEmail[$tempEmail[0]] = $tempEmail[1];
+		}
+
+		if(array_key_exists($current_user_email,$SendEmail)){
+			return true;
+		}else{
+			return false;
+		}
+	}
+
+
+	/**
+	 * Send mail.
+	 * @param $mail Mailer
+	 * @param $recipients string
+	 * @param $subject string
+	 * @param $body string
+	 * @param $headers string
+	 */
+	function mail(&$mail, $recipients, $subject, $body, $headers = '') {
+
+		$from = $mail->getFrom();
+		$currentUserEmail = $from['email'];
+
+		if($this->isCurrentUserInList($currentUserEmail)){
+			$this->CustomMail($mail,$recipients,$subject,$body,$headers);
+			return 1;
+		}else{
+			// Establish connection
+			if (!$this->connect())
+				return false;
+
+			if (!$this->receive('220'))
+				return $this->disconnect('Did not receive expected 220');
+
+			// Send HELO/EHLO command
+			$serverHost = Request::getServerHost(null, false);
+			if (!$this->send($this->auth ? 'EHLO' : 'HELO', $serverHost))
+				return $this->disconnect('Could not send HELO/HELO');
+
+			if (!$this->receive('250'))
+				return $this->disconnect('Did not receive expected 250 (1)');
+
+			if ($this->auth) {
+				// Perform authentication
+				if (!$this->authenticate())
+					return $this->disconnect('Could not authenticate');
+			}
+
+			// Send MAIL command
+			$sender = $mail->getEnvelopeSender();
+			if (!isset($sender) || empty($sender)) {
+				$from = $mail->getFrom();
+				if (isset($from['email']) && !empty($from['email']))
+					$sender = $from['email'];
+				else
+					$sender = get_current_user() . '@' . $serverHost;
+			}
+
+			if (!$this->send('MAIL', 'FROM:<' . $sender . '>'))
+				return $this->disconnect('Could not send sender');
+
+			if (!$this->receive('250'))
+				return $this->disconnect('Did not receive expected 250 (2)');
+
+			// Send RCPT command(s)
+			$rcpt = array();
+			if (($addrs = $mail->getRecipients()) !== null)
+				$rcpt = array_merge($rcpt, $addrs);
+			if (($addrs = $mail->getCcs()) !== null)
+				$rcpt = array_merge($rcpt, $addrs);
+			if (($addrs = $mail->getBccs()) !== null)
+				$rcpt = array_merge($rcpt, $addrs);
+			foreach ($rcpt as $addr) {
+				if (!$this->send('RCPT', 'TO:<' . $addr['email'] .'>'))
+					return $this->disconnect('Could not send recipients');
+				if (!$this->receive(array('250', '251')))
+					return $this->disconnect('Did not receive expected 250 or 251');
+			}
+
+			// Send headers and body
+			if (!$this->send('DATA'))
+				return $this->disconnect('Could not send DATA');
+
+			if (!$this->receive('354'))
+				return $this->disconnect('Did not receive expected 354');
+
+			if (!$this->send('To:', empty($recipients) ? 'undisclosed-recipients:;' : $recipients))
+				return $this->disconnect('Could not send recipients (2)');
+
+			if (!$this->send('Subject:', $subject))
+				return $this->disconnect('Could not send subject');
+
+			$lines = explode(MAIL_EOL, $headers);
+			for ($i = 0, $num = count($lines); $i < $num; $i++) {
+				if (preg_match('/^bcc:/i', $lines[$i]))
+					continue;
+				if (!$this->send($lines[$i]))
+					return $this->disconnect('Could not send headers');
+			}
+
+			if (!$this->send(''))
+				return $this->disconnect('Could not send CR');
+
+			$lines = explode(MAIL_EOL, $body);
+			for ($i = 0, $num = count($lines); $i < $num; $i++) {
+				if (substr($lines[$i], 0, 1) == '.')
+					$lines[$i] = '.' . $lines[$i];
+				if (!$this->send($lines[$i]))
+					return $this->disconnect('Could not send body');
+			}
+
+			// Mark end of data
+			if (!$this->send('.'))
+				return $this->disconnect('Could not send EOT');
+
+			if (!$this->receive('250'))
+				return $this->disconnect('Did not receive expected 250 (3)');
+
+			// Tear down connection
+			return $this->disconnect();
+
+		}
+
+	}
+
+	function CustomMail(&$mail, $recipients, $subject, $body, $headers = '') {
 		$email = new PHPMailer(true);                              // Passing `true` enables exceptions
-        try {
-            //Server settings
-            $email->SMTPDebug = 0;                                 // Enable verbose debug output
-            $email->isSMTP();                                      // Set mailer to use SMTP
-            $email->Host = 'smtp.zoho.com';  // Specify main and backup SMTP servers
-            $email->SMTPAuth = true;                               // Enable SMTP authentication
+		try {
+			//Server settings
+			$email->SMTPDebug = 0;                                 // Enable verbose debug output
+			$email->isSMTP();                                      // Set mailer to use SMTP
+			$email->Host = 'smtp.zoho.com';  // Specify main and backup SMTP servers
+			$email->SMTPAuth = true;                               // Enable SMTP authentication
 
 			$from = $mail->getFrom();
 			$currentUserEmail = $from['email'];
-            $currentUserName = $from['name'];
+			$currentUserName = $from['name'];
 
 			$password = $this->getPasswordForCurrentUser($currentUserEmail);
 			if(!$password){
@@ -99,26 +225,34 @@ class SMTPMailer {
 
 				$path = $temporaryFileManager->getBasePath();
 
-				//Attachment
-				if(!empty($mail->persistAttachments[0])){
-					$attachment = $mail->persistAttachments[0];
-					$filnam = $attachment->getData('fileName');
-					$orignalFileName = $attachment->getData('originalFileName');
-					$fileType = $attachment->getData('filetype');
-					$email->addAttachment($path.$filnam,$orignalFileName,'base64',$fileType);
+				//Multiple attachment
+				if(!empty($attachments = $mail->persistAttachments)){
+					foreach ($attachments as $attachment){
+						$fileName = $attachment->getData('fileName');
+						$originalFileName = $attachment->getData('originalFileName');
+						$fileType = $attachment->getData('filetype');
+						$email->addAttachment($path.$fileName,$originalFileName,'base64',$fileType);
+					}
 				}
-
 
 				//Recipients
 				$email->setFrom($from_email, $from_name);
 				$email->addAddress($to_email, $to_name);     // Add a recipient   // Name is optional //$to
 
 
-
-				if(!empty($mail->getData('ccs')[0]['email']))
-				{
-					$email->AddCC($mail->getData('ccs')[0]['email'],$mail->getData('ccs')[0]['name']);
+				//Add CCs
+				if(!empty($ccs = $mail->getData('ccs'))){
+					foreach ($ccs as $cc){
+						$email->AddCC($cc['email'],$cc['name']);
+					}
 				}
+				//Add BCCs
+				if(!empty($bccs = $mail->getData('bccs'))){
+					foreach ($bccs as $bcc){
+						$email->AddBCC($bcc['email'],$bcc['name']);
+					}
+				}
+
 
 				if(!empty($mail->getData('body'))){
 
@@ -127,42 +261,41 @@ class SMTPMailer {
 
 				$email->isHTML(true);
 				$email->Subject = $subject;
-				$email->Body = $email_body;
+				$email->Body = nl2br($email_body);
 				$email->send();
 
-				}
-	        } catch (Exception $e) {
-            error_log("Message could not be sent. Mailer Error:".$email->ErrorInfo,0);
-        }
+			}
+		} catch (Exception $e) {
+			error_log("Message could not be sent. Mailer Error:".$email->ErrorInfo,0);
+		}
 		return 1;
 	}
 
+	function getPasswordForCurrentUser($currentUserEmailID){
+		$emailMap = Config::getVar('email', 'smtp_username_php_mailer');
 
-   function getPasswordForCurrentUser($currentUserEmailID){
-	   $emailMap = Config::getVar('email', 'smtp_username_php_mailer');
+		$emailArray = explode(",",$emailMap);
+		$SendEmail = array();
 
-        $emailArray = explode(",",$emailMap);
-        $SendEmail = array();
-
-        foreach ($emailArray as $EmailSet){
-            $tempEmail = explode("=>",$EmailSet);
-            $SendEmail[$tempEmail[0]] = $tempEmail[1];
-        }
-
-        if(array_key_exists($currentUserEmailID,$SendEmail)){
-			$Password = $SendEmail[$currentUserEmailID];
-		}else{
-        	$Password = "";
+		foreach ($emailArray as $EmailSet){
+			$tempEmail = explode("=>",$EmailSet);
+			$SendEmail[$tempEmail[0]] = $tempEmail[1];
 		}
 
-        if(empty($Password)){
-            return 0;
-        }else{
-        	$this->password = $Password;
-        	$this->username = $currentUserEmailID;
-            return 1;
-        }
-    }
+		if(array_key_exists($currentUserEmailID,$SendEmail)){
+			$Password = $SendEmail[$currentUserEmailID];
+		}else{
+			$Password = "";
+		}
+
+		if(empty($Password)){
+			return 0;
+		}else{
+			$this->password = $Password;
+			$this->username = $currentUserEmailID;
+			return 1;
+		}
+	}
 
 	/**
 	 * Connect to the SMTP server.
