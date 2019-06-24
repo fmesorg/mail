@@ -96,7 +96,9 @@ class PKPMailTemplate extends Mail {
 	 * @return boolean
 	 */
 	function getAddressFieldsEnabled() {
-		return $this->addressFieldsEnabled;
+//		return $this->addressFieldsEnabled;
+//		This field is enabled permanently true because it was disabling cc and bcc fields for notifyrewier()
+		return true;
 	}
 
 	/**
