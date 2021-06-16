@@ -18,503 +18,138 @@
 
 import('lib.pkp.classes.mail.Mail');
 
-require 'PHPMailer/class.phpmailer.php';
-require 'PHPMailer/class.smtp.php';
 
-class SMTPMailer {
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
-	/** @var $server string SMTP server hostname (default localhost) */
-	var $server;
+// If necessary, modify the path in the require statement below to refer to the
+// location of your Composer autoload.php file.
+require 'vendor/autoload.php';
 
-	/** @var $port string SMTP server port (default 25) */
-	var $port;
+class SMTPMailer
+{
 
-	/** @var $auth string Authentication mechanism (optional) (PLAIN | LOGIN | CRAM-MD5 | DIGEST-MD5) */
-	var $auth;
+    /** @var $server string SMTP server hostname (default localhost) */
+    var $server;
 
-	/** @var $username string Username for authentication (optional) */
-	var $username;
+    /** @var $port string SMTP server port (default 25) */
+    var $port;
 
-	/** @var $password string Password for authentication (optional) */
-	var $password;
+    /** @var $auth string Authentication mechanism (optional) (PLAIN | LOGIN | CRAM-MD5 | DIGEST-MD5) */
+    var $auth;
 
-	/** @var $socket int SMTP socket */
-	var $socket;
+    /** @var $username string Username for authentication (optional) */
+    var $username;
 
-	/**
-	 * Constructor.
-	 */
-	function SMTPMailer() {
-		$this->server = Config::getVar('email', 'smtp_server');
-		$this->port = Config::getVar('email', 'smtp_port');
-		$this->auth = Config::getVar('email', 'smtp_auth');
-		$this->username = Config::getVar('email', 'smtp_username');
-		$this->password = Config::getVar('email', 'smtp_password');
-		if (!$this->server)
-			$this->server = 'localhost';
-		if (!$this->port)
-			$this->port = 25;
-	}
+    /** @var $password string Password for authentication (optional) */
+    var $password;
 
-	function isCurrentUserInList($current_user_email){
-		$emailMap = Config::getVar('email', 'smtp_username_php_mailer');
+    /** @var $socket int SMTP socket */
+    var $socket;
 
-		$emailArray = explode(",",$emailMap);
-		$SendEmail = array();
+    /**
+     * Constructor.
+     */
+    function SMTPMailer()
+    {
+        $this->server = 'email-smtp.us-east-1.amazonaws.com';
+        $this->port = 587;
+        $this->auth = true;
+        $this->username = 'AKIAS6PMQVDXSAVACMXH';
+        $this->password = 'BCYGnS4AIf/t/Z/c0rnaMkAr1gH/mLZ/ahD2LF7qX1Q+';
+        if (!$this->server)
+            $this->server = 'localhost';
+        if (!$this->port)
+            $this->port = 25;
+    }
 
-		foreach ($emailArray as $EmailSet){
-			$tempEmail = explode("=>",$EmailSet);
-			$SendEmail[$tempEmail[0]] = $tempEmail[1];
-		}
+    /**
+     * Send mail.
+     * @param $mail Mailer
+     * @param $recipients string
+     * @param $subject string
+     * @param $body string
+     * @param $headers string
+     */
+    function mail(&$mail, $recipients, $subject, $body, $headers = '')
+    {
 
-		if(array_key_exists($current_user_email,$SendEmail)){
-			return true;
-		}else{
-			return false;
-		}
-	}
+        try {
+            $email = new PHPMailer(true);
+            $email->isSMTP();
+            $from = $mail->getFrom();
+            $currentUserEmail = $from['email'];
+            $currentUserName = $from['name'];
 
+            $email->setFrom($currentUserEmail, $currentUserName);
 
-	/**
-	 * Send mail.
-	 * @param $mail Mailer
-	 * @param $recipients string
-	 * @param $subject string
-	 * @param $body string
-	 * @param $headers string
-	 */
-	function mail(&$mail, $recipients, $subject, $body, $headers = '') {
-
-		$from = $mail->getFrom();
-		$currentUserEmail = $from['email'];
-
-		if($this->isCurrentUserInList($currentUserEmail)){
-			$this->CustomMail($mail,$recipients,$subject,$body,$headers);
-			return 1;
-		}else{
-			// Establish connection
-			if (!$this->connect())
-				return false;
-
-			if (!$this->receive('220'))
-				return $this->disconnect('Did not receive expected 220');
-
-			// Send HELO/EHLO command
-			$serverHost = Request::getServerHost(null, false);
-			if (!$this->send($this->auth ? 'EHLO' : 'HELO', $serverHost))
-				return $this->disconnect('Could not send HELO/HELO');
-
-			if (!$this->receive('250'))
-				return $this->disconnect('Did not receive expected 250 (1)');
-
-			if ($this->auth) {
-				// Perform authentication
-				if (!$this->authenticate())
-					return $this->disconnect('Could not authenticate');
-			}
-
-			// Send MAIL command
-			$sender = $mail->getEnvelopeSender();
-			if (!isset($sender) || empty($sender)) {
-				$from = $mail->getFrom();
-				if (isset($from['email']) && !empty($from['email']))
-					$sender = $from['email'];
-				else
-					$sender = get_current_user() . '@' . $serverHost;
-			}
-
-			if (!$this->send('MAIL', 'FROM:<' . $sender . '>'))
-				return $this->disconnect('Could not send sender');
-
-			if (!$this->receive('250'))
-				return $this->disconnect('Did not receive expected 250 (2)');
-
-			// Send RCPT command(s)
-			$rcpt = array();
-			if (($addrs = $mail->getRecipients()) !== null)
-				$rcpt = array_merge($rcpt, $addrs);
-			if (($addrs = $mail->getCcs()) !== null)
-				$rcpt = array_merge($rcpt, $addrs);
-			if (($addrs = $mail->getBccs()) !== null)
-				$rcpt = array_merge($rcpt, $addrs);
-			foreach ($rcpt as $addr) {
-				if (!$this->send('RCPT', 'TO:<' . $addr['email'] .'>'))
-					return $this->disconnect('Could not send recipients');
-				if (!$this->receive(array('250', '251')))
-					return $this->disconnect('Did not receive expected 250 or 251');
-			}
-
-			// Send headers and body
-			if (!$this->send('DATA'))
-				return $this->disconnect('Could not send DATA');
-
-			if (!$this->receive('354'))
-				return $this->disconnect('Did not receive expected 354');
-
-			if (!$this->send('To:', empty($recipients) ? 'undisclosed-recipients:;' : $recipients))
-				return $this->disconnect('Could not send recipients (2)');
-
-			if (!$this->send('Subject:', $subject))
-				return $this->disconnect('Could not send subject');
-
-			$lines = explode(MAIL_EOL, $headers);
-			for ($i = 0, $num = count($lines); $i < $num; $i++) {
-				if (preg_match('/^bcc:/i', $lines[$i]))
-					continue;
-				if (!$this->send($lines[$i]))
-					return $this->disconnect('Could not send headers');
-			}
-
-			if (!$this->send(''))
-				return $this->disconnect('Could not send CR');
-
-			$lines = explode(MAIL_EOL, $body);
-			for ($i = 0, $num = count($lines); $i < $num; $i++) {
-				if (substr($lines[$i], 0, 1) == '.')
-					$lines[$i] = '.' . $lines[$i];
-				if (!$this->send($lines[$i]))
-					return $this->disconnect('Could not send body');
-			}
-
-			// Mark end of data
-			if (!$this->send('.'))
-				return $this->disconnect('Could not send EOT');
-
-			if (!$this->receive('250'))
-				return $this->disconnect('Did not receive expected 250 (3)');
-
-			// Tear down connection
-			return $this->disconnect();
-
-		}
-
-	}
-
-	function CustomMail(&$mail, $recipients, $subject, $body, $headers = '') {
-		$email = new PHPMailer(true);                              // Passing `true` enables exceptions
-		try {
-			//Server settings
-			$email->SMTPDebug = 0;                                 // Enable verbose debug output
-			$email->isSMTP();                                      // Set mailer to use SMTP
-			$email->Host = 'smtp.zoho.com';  // Specify main and backup SMTP servers
-			$email->SMTPAuth = true;                               // Enable SMTP authentication
-
-			$from = $mail->getFrom();
-			$currentUserEmail = $from['email'];
-			$currentUserName = $from['name'];
-
-			$password = $this->getPasswordForCurrentUser($currentUserEmail);
-			if(!$password){
-				error_log("Email Can not be sent for User: ".$currentUserName, 0);
-				echo "Email can not be sent";
-			}else{
-				$from_email = $this->username;
-				$from_name = $currentUserName;
-
-				//-------------------------------
-				$email->Username = $this->username;                 // SMTP username
-				$email->Password = $this->password;                           // SMTP password
-				$email->SMTPSecure = 'ssl';
-				$email->Port = 465;                                    // TCP port to connect to
-
-				$to_email = $mail->getData('recipients')[0]['email'];
-				$to_name = $mail->getData('recipients')[0]['name'];
-
-				import('classes.file.TemporaryFileManager');
-				$temporaryFileManager = new TemporaryFileManager();
-
-				$path = $temporaryFileManager->getBasePath();
-
-				//Multiple attachment
-				if(!empty($attachments = $mail->persistAttachments)){
-					foreach ($attachments as $attachment){
-						$fileName = $attachment->getData('fileName');
-						$originalFileName = $attachment->getData('originalFileName');
-						$fileType = $attachment->getData('filetype');
-						$email->addAttachment($path.$fileName,$originalFileName,'base64',$fileType);
-					}
-				}
-
-				//Recipients
-				$email->setFrom($from_email, $from_name);
-				$email->addAddress($to_email, $to_name);     // Add a recipient   // Name is optional //$to
+            $email->Username = $this->username;
+            $email->Password = $this->password;
+            $email->Host = $this->server;
+            $email->Port = $this->port;
+            $email->SMTPAuth = true;
+            $email->SMTPSecure = 'tls';
+            //  $email->addCustomHeader('X-SES-CONFIGURATION-SET', $configurationSet);
 
 
-				//Add CCs
-				if(!empty($ccs = $mail->getData('ccs'))){
-					foreach ($ccs as $cc){
-						$email->AddCC($cc['email'],$cc['name']);
-					}
-				}
-				//Add BCCs
-				if(!empty($bccs = $mail->getData('bccs'))){
-					foreach ($bccs as $bcc){
-						$email->AddBCC($bcc['email'],$bcc['name']);
-					}
-				}
+            // Specify the message recipients.
+            $to_email = $mail->getData('recipients')[0]['email'];
+
+            $email->addAddress($to_email);
+            import('classes.file.TemporaryFileManager');
+            $temporaryFileManager = new TemporaryFileManager();
+
+            $path = $temporaryFileManager->getBasePath();
+            //Multiple attachment
+            if (!empty($attachments = $mail->persistAttachments)) {
+                foreach ($attachments as $attachment) {
+                    $fileName = $attachment->getData('fileName');
+                    $originalFileName = $attachment->getData('originalFileName');
+                    $fileType = $attachment->getData('filetype');
+                    $email->addAttachment($path . $fileName, $originalFileName, 'base64', $fileType);
+                }
+            }
 
 
-				if(!empty($mail->getData('body'))){
+            //Add CCs
+            if (!empty($ccs = $mail->getData('ccs'))) {
+                foreach ($ccs as $cc) {
+                    $email->AddCC($cc['email'], $cc['name']);
+                }
+            }
+            //Add BCCs
+            if (!empty($bccs = $mail->getData('bccs'))) {
+                foreach ($bccs as $bcc) {
+                    $email->AddBCC($bcc['email'], $bcc['name']);
+                }
+            }
+            // Specify the content of the message.
 
-					$email_body = $mail->getData('body');
-				}
 
-				$email->isHTML(true);
-				$email->Subject = $subject;
-				$email->Body = nl2br($email_body);
-				$email->send();
+            $email->Subject = $subject;
 
-			}
-		} catch (Exception $e) {
-			error_log("Message could not be sent. Mailer Error:".$email->ErrorInfo,0);
-		}
+            if (!empty($mail->getData('body'))) {
+
+                $email_body = $mail->getData('body');
+            }
+            echo 'body';
+            $email->Body = $email_body;
+
+            $email->Send();
+//            echo "Email sent!", PHP_EOL;
+
+        } catch (phpmailerException $e) {
+            echo "An error occurred. {$e->errorMessage()}", PHP_EOL; //Catch errors from PHPMailer.
+        } catch (Exception $e) {
+            echo "Email not sent. ", PHP_EOL; //Catch errors from Amazon SES.
+        }
+
+
+        // Tear down connection
 		return 1;
-	}
 
-	function getPasswordForCurrentUser($currentUserEmailID){
-		$emailMap = Config::getVar('email', 'smtp_username_php_mailer');
 
-		$emailArray = explode(",",$emailMap);
-		$SendEmail = array();
-
-		foreach ($emailArray as $EmailSet){
-			$tempEmail = explode("=>",$EmailSet);
-			$SendEmail[$tempEmail[0]] = $tempEmail[1];
-		}
-
-		if(array_key_exists($currentUserEmailID,$SendEmail)){
-			$Password = $SendEmail[$currentUserEmailID];
-		}else{
-			$Password = "";
-		}
-
-		if(empty($Password)){
-			return 0;
-		}else{
-			$this->password = $Password;
-			$this->username = $currentUserEmailID;
-			return 1;
-		}
-	}
-
-	/**
-	 * Connect to the SMTP server.
-	 * @return boolean
-	 */
-	function connect() {
-		$this->socket = fsockopen($this->server, $this->port, $errno, $errstr, 30);
-		if (!$this->socket)
-			return false;
-		return true;
-	}
-
-	/**
-	 * Disconnect from the SMTP server, sending a QUIT first.
-	 * @param $success boolean
-	 * @return boolean
-	 */
-	function disconnect($error = '') {
-		if (!$this->send('QUIT') || !$this->receive('221') && empty($error)) {
-			$error = 'Unable to disconnect from mail server';
-		}
-		fclose($this->socket);
-
-		if (!empty($error)) {
-			error_log('OJS SMTPMailer: ' . $error);
-			return false;
-		}
-		return true;
-	}
-
-	/**
-	 * Send a command/data.
-	 * @param $command string
-	 * @param $data string
-	 * @return boolean
-	 */
-	function send($command, $data = '') {
-		$ret = @fwrite($this->socket, $command . (empty($data) ? '' : ' ' . $data) . "\r\n");
-		if ($ret !== false)
-			return true;
-		return false;
-	}
-
-	/**
-	 * Receive a response.
-	 * @param $expected string/array expected response code(s)
-	 * @return boolean
-	 */
-	function receive($expected) {
-		return $this->receiveData($expected, $data);
-	}
-
-	/**
-	 * Receive a response and return the data payload.
-	 * @param $expected string/array expected response code
-	 * @param $data string buffer
-	 * @return boolean
-	 */
-	function receiveData($expected, &$data) {
-		do {
-			$line = @fgets($this->socket);
-		} while($line !== false && substr($line, 3, 1) != ' ');
-
-		if ($line !== false) {
-			$response = substr($line, 0, 3);
-			$data = substr($line, 4);
-			if ((is_array($expected) && in_array($response, $expected)) || ($response === $expected))
-				return true;
-		}
-		return false;
-	}
-
-	/**
-	 * Authenticate using the specified mechanism.
-	 * @return boolean
-	 */
-	function authenticate() {
-		switch (strtoupper($this->auth)) {
-			case 'PLAIN':
-				return $this->authenticate_plain();
-			case 'LOGIN':
-				return $this->authenticate_login();
-			case 'CRAM-MD5':
-				return $this->authenticate_cram_md5();
-			case 'DIGEST-MD5':
-				return $this->authenticate_digest_md5();
-			default:
-				return true;
-		}
-	}
-
-	/**
-	 * Authenticate using PLAIN.
-	 * @return boolean
-	 */
-	function authenticate_plain() {
-		$authString = $this->username . chr(0x00) . $this->username . chr(0x00) . $this->password;
-		if (!$this->send('AUTH', 'PLAIN ' . base64_encode($authString)))
-			return false;
-		return $this->receive('235');
-	}
-
-	/**
-	 * Authenticate using LOGIN.
-	 * @return boolean
-	 */
-	function authenticate_login() {
-		if (!$this->send('AUTH', 'LOGIN'))
-			return false;
-		if (!$this->receive('334'))
-			return false;
-		if (!$this->send(base64_encode($this->username)))
-			return false;
-		if (!$this->receive('334'))
-			return false;
-		if (!$this->send(base64_encode($this->password)))
-			return false;
-		return $this->receive('235');
-	}
-
-	/**
-	 * Authenticate using CRAM-MD5 (see RFC 2195).
-	 * @return boolean
-	 */
-	function authenticate_cram_md5() {
-		if (!$this->send('AUTH', 'CRAM-MD5'))
-			return false;
-		if (!$this->receiveData('334', $digest))
-			return false;
-		$authString = $this->username . ' ' . $this->hmac_md5(base64_decode($digest), $this->password);
-		if (!$this->send(base64_encode($authString)))
-			return false;
-		return $this->receive('235');
-	}
-
-	/**
-	 * Authenticate using DIGEST-MD5 (see RFC 2831).
-	 * @return boolean
-	 */
-	function authenticate_digest_md5() {
-		if (!$this->send('AUTH', 'DIGEST-MD5'))
-			return false;
-		if (!$this->receiveData('334', $data))
-			return false;
-
-		// FIXME Make parser smarter to handle "unusual" and error cases
-		$challenge = array();
-		$data = base64_decode($data);
-		while(!empty($data)) {
-			@list($key, $rest) = explode('=', $data, 2);
-			if ($rest[0] != '"') {
-				@list($value, $data) = explode(',', $rest, 2);
-			} else {
-				@list($value, $data) = explode('"', substr($rest, 1), 2);
-				$data = substr($data, 1);
-			}
-			if (!empty($value))
-				$challenge[$key] = $value;
-		}
-
-		$realms = explode(',', $challenge['realm']);
-		if (empty($realms))
-			$realm = $this->server;
-		else
-			$realm = $realms[0]; // FIXME Multiple realms
-		$qop = 'auth';
-		$nc = '00000001';
-		$uri = 'smtp/' . $this->server;
-		$cnonce = md5(uniqid(mt_rand(), true));
-
-		$a1 = pack('H*', md5($this->username . ':' . $realm . ':' . $this->password)) . ':' . $challenge['nonce'] . ':' . $cnonce;
-
-		// FIXME authorization ID not supported
-		if (isset($authzid))
-			$a1 .= ':' . $authzid;
-
-		$a2 = 'AUTHENTICATE:' . $uri;
-
-		// FIXME 'auth-int' and 'auth-conf' not supported
-		if ($qop == 'auth-int' || $qop == 'auth-int')
-			$a2 .= ':00000000000000000000000000000000';
-
-		$response = md5(md5($a1) . ':' . ($challenge['nonce'] . ':' . $nc . ':' . $cnonce. ':' . $qop . ':' . md5($a2)));
-
-		$authString = sprintf('charset=utf-8,username="%s",realm="%s",nonce="%s",nc=%s,cnonce="%s",digest-uri="%s",response=%s,qop=%s', $this->username, $realm, $challenge['nonce'], $nc, $cnonce, $uri, $response, $qop);
-		if (!$this->send(base64_encode($authString)))
-			return false;
-		if (!$this->receive('334'))
-			return false;
-		if (!$this->send(''))
-			return false;
-		return $this->receive('235');
-	}
-
-	/**
-	 * Generic HMAC digest computation (see RFC 2104).
-	 * @param $hashfn string e.g., 'md5' or 'sha1'
-	 * @param $blocksize int
-	 * @param $data string
-	 * @param $key string
-	 * @return string (as hex)
-	 */
-	function hmac($hashfn, $blocksize, $data, $key) {
-		if (strlen($key) > $blocksize)
-			$key = pack('H*', $hashfn($key));
-		$key = str_pad($key, $blocksize, chr(0x00));
-		$ipad = str_repeat(chr(0x36), $blocksize);
-		$opad = str_repeat(chr(0x5C), $blocksize);
-		$hmac = pack('H*', $hashfn(($key ^ $opad) . pack('H*', $hashfn(($key ^ $ipad) . $data))));
-		return bin2hex($hmac);
-	}
-
-	/**
-	 * Compute HMAC-MD5 digest.
-	 * @return string (as hex)
-	 */
-	function hmac_md5($data, $key = '') {
-		return $this->hmac('md5', 64, $data, $key);
-	}
+    }
 }
 
 ?>

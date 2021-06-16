@@ -119,15 +119,24 @@ class PKPMailTemplate extends Mail {
 		$body = $this->getBody();
 
 		// Replace variables in message with values
+		$bodyText=array();
 		foreach ($paramArray as $key => $value) {
 			if (!is_object($value)) {
 				$subject = str_replace('{$' . $key . '}', $value, $subject);
-				$body = str_replace('{$' . $key . '}', $value, $body);
+				$text =$key;
+				$text .=': '.$value;
+				array_push($bodyText,$text);
 			}
+
+		}
+
+		$newBody='';
+		foreach ($bodyText as $e){
+			$newBody .=$e.PHP_EOL;
 		}
 
 		$this->setSubject($subject);
-		$this->setBody($body);
+		$this->setBody($newBody);
 	}
 
 	/**
