@@ -109,6 +109,32 @@ class PKPMailTemplate extends Mail {
 		return ($this->errorMessages != null);
 	}
 
+
+
+
+	function addProperName($key)
+	{
+		switch ($key) {
+			case "url":
+				return "Link : ";
+				break;
+			case "siteTitle":
+				return "";
+				break;
+			case "journalName":
+				return "";
+				break;
+			case "principalContactSignature":
+				return "";
+				break;
+			case "journalUrl":
+				return "";
+				break;
+			default :
+				return $key . ' : ';
+
+		}
+	}
 	/**
 	 * Assigns values to e-mail parameters.
 	 * @param $paramArray array
@@ -123,8 +149,9 @@ class PKPMailTemplate extends Mail {
 		foreach ($paramArray as $key => $value) {
 			if (!is_object($value)) {
 				$subject = str_replace('{$' . $key . '}', $value, $subject);
-				$text =$key;
-				$text .=': '.$value;
+				$text=$this->addProperName($key);
+//				 = $key;
+				$text .= $value;
 				array_push($bodyText,$text);
 			}
 

@@ -55,8 +55,8 @@ class SMTPMailer
         $this->server = 'email-smtp.us-east-1.amazonaws.com';
         $this->port = 587;
         $this->auth = true;
-        $this->username = 'AKIAS6PMQVDXSAVACMXH';
-        $this->password = 'BCYGnS4AIf/t/Z/c0rnaMkAr1gH/mLZ/ahD2LF7qX1Q+';
+        $this->username = 'Username';
+        $this->password = 'password';
         if (!$this->server)
             $this->server = 'localhost';
         if (!$this->port)
@@ -139,14 +139,16 @@ class SMTPMailer
 //            echo "Email sent!", PHP_EOL;
 
         } catch (phpmailerException $e) {
-            echo "An error occurred. {$e->errorMessage()}", PHP_EOL; //Catch errors from PHPMailer.
+            $error = "An error occurred. ";
+            error_log('OJS SMTPMailer: ' . $error);
         } catch (Exception $e) {
-            echo "Email not sent. ", PHP_EOL; //Catch errors from Amazon SES.
+
+            $error = "Email not sent.";
+            error_log('OJS SMTPMailer: ' . $error);
         }
 
 
-        // Tear down connection
-		return 1;
+        return 1;
 
 
     }
