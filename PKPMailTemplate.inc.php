@@ -130,6 +130,9 @@ class PKPMailTemplate extends Mail {
 			case "journalUrl":
 				return "";
 				break;
+			case "userFullName":
+				return "User Fullname : ";
+				break;
 			default :
 				return $key . ' : ';
 
