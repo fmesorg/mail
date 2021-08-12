@@ -78,7 +78,7 @@ class SMTPMailer
             $email = new PHPMailer(true);
             $email->isSMTP();
             $from = $mail->getFrom();
-            $currentUserEmail = $from['email'];
+            $currentUserEmail = 'mails@ijme.in';
             $currentUserName = $from['name'];
 
             $email->setFrom($currentUserEmail, $currentUserName);
