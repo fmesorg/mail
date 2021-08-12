@@ -187,7 +187,7 @@ class PKPMailTemplate extends Mail
         $body = $this->getBody();
 
         // Replace variables in message with values
-        if ($subject == '[IJME] Password Reset Confirmation') {
+        if ($subject == '[IJME] Password Reset Confirmation' || $subject == '[IJME] Password Reset' ) {
             $bodyText = array();
             foreach ($paramArray as $key => $value) {
                 if (!is_object($value)) {
